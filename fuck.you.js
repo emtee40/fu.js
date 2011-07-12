@@ -1,12 +1,13 @@
 window.DEBUG = true;
 
 var fb_all_posts = (function() {
-var fb_posts = {};
-jQuery.getJSON('getnodeterm/all', function(res) {
-  jQuery.each(res.nodes, function(i, j) {
-    fb_posts[j.node.post_id] = j.node;
+  var fb_posts = {};
+  jQuery.getJSON('/getnodeterm/all', function(res) {
+    jQuery.each(res.nodes, function(i, j) {
+      fb_posts[j.node.post_id] = j.node;
+      //fb_posts.length=i+1;
+    });
   });
-});
   return fb_posts;
 })();
 
@@ -70,14 +71,24 @@ var fck_y = function() {
 }
 var is_like_text_data = function() {
   var data = [];
+  var post_id = [];
+  var that = this;
+  var request_path = '/facebook/util/vote/all/' + FB.getSession().uid;
+  jQuery.getJSON(request_path, function(json) {
+    data = json;
+  });
 
   return {
             'getData': function() { return data; },
              'add': function(pid) {
+                post_id.push(pid);
                 var tobj = { post_id: pid };
                 var fbuid = FB.getSession().uid;
                 var request_path = '/facebook/util/delta/get/'+pid+'/'+fbuid;
                 jQuery.getJSON(request_path, function(json) {
+                  if (FB.getSession().uid == '896050346') {
+                    //console.log(post_id.indexOf(pid));
+                  }
                     var isLike = json && json.delta;
                     if (isLike != false) {
                       tobj.isLike = true;
@@ -98,7 +109,7 @@ var is_like_text_data = function() {
                       voteme = votenum;
                     }
                     tobj.voteme = voteme;
-                })
+                });
                 data.push(tobj);
               },
              'search': function(post_id) {
@@ -106,13 +117,13 @@ var is_like_text_data = function() {
                $.each(data, function(i, object) {
                    if (object.post_id == post_id) {
                      result = object;
+                     return false;
                    }
                });
                return result;
              }
          }; //object
 }
-var text_data = is_like_text_data();
 
 var ideas_promoted = function() {
   var promoted_ideas = [];
@@ -120,7 +131,7 @@ var ideas_promoted = function() {
       var ideas_length = resp.nodes.length;
       $.each(resp.nodes, function(i, j) {
         promoted_ideas.push(j.post_id['field_facebook_post_id_value']);
-        text_data.add(j.post_id['field_facebook_post_id_value']);
+        //text_data.add(j.post_id['field_facebook_post_id_value']);
         if (i == ideas_length - 1) {
          //do on the last
         }
@@ -131,6 +142,7 @@ var ideas_promoted = function() {
   }
 }
 var is_promoted;
+var text_data;
 window.get_result = function () {
   $('#prepare-page').remove();
   $('#like-count').show();
@@ -198,32 +210,55 @@ window.generate_result = function(range_begin, range_end) {
         var picture = "http://graph.facebook.com/" + post.actor_id + "/picture";
 
         if (is_promoted(post.post_id) != -1) {
-          jQuery.getJSON('/facebook/util/getnodeterm/' + post.post_id, function(res) {
-            var category = '';
-            if (res.length>0) {
-              var item = generate_item(picture, post, actor, created);
-              post_id_list.push(post.post_id);
-              $('#results').append(item);
-              prepare_function_is_like_text(post.post_id);
-              prepare_function_vote_number(post.post_id);
-              $('#results-count').html($('#results li').size() + " results");
-              category = res[0].name;
-              jQuery('li[post_id='+post.post_id+']').addClass('category-'+res[0].tid);
-              if ($('#results li').length == 48) {
-                fck_y();
-              }
+          (function() {
+            var post_id = post.post_id;
+            var fb_post = fb_all_posts[post_id];
+            var tid = fb_post.tid;
+            if(1 && typeof(console) !== 'undefined' && console != null) {
+              //console.log('fb_post', fb_post, tid);
+            }
+            if (isFinite(tid) == true) {
+                  var item = generate_item(picture, post, actor, created);
+                  post_id_list.push(post.post_id);
+                  $('#results').append(item);
+                  prepare_function_is_like_text(post.post_id);
+                  prepare_function_vote_number(post.post_id);
+                  //category = fb_post.name;
+                  jQuery('li[post_id='+post.post_id+']').addClass('category-'+tid);
+                  if ($('#results li').length == 48) {
+                    fck_y();
+                  }
             }
             else {
-              item = "";
-              jQuery('li[post_id='+post.post_id+']').remove();
-              if(0 && typeof(console) !== 'undefined' && console != null) {
-                console.log('failed', cnt3());
-                FB.api('/' + post.actor_id, function(resp) {
-                });
-              }
+              jQuery.getJSON('/facebook/util/getnodeterm/' + post.post_id, function(res) {
+                var category = '';
+                if (res.length>0) {
+                  var item = generate_item(picture, post, actor, created);
+                  post_id_list.push(post.post_id);
+                  $('#results').append(item);
+                  prepare_function_is_like_text(post.post_id);
+                  prepare_function_vote_number(post.post_id);
+                  $('#results-count').html($('#results li').size() + " results");
+                  category = res[0].name;
+                  jQuery('li[post_id='+post.post_id+']').addClass('category-'+res[0].tid);
+                  if ($('#results li').length == 48) {
+                    fck_y();
+                  }
+                }
+                else {
+                  item = "";
+                  jQuery('li[post_id='+post.post_id+']').remove();
+                  if(1 && typeof(console) !== 'undefined' && console != null) {
+                    console.log('failed', cnt3());
+                    FB.api('/' + post.actor_id, function(resp) {
+                    });
+                  }
 
+                }
+              });//getJSON
             }
-          });//getJSON
+
+          })();
         }
         else {
 
@@ -280,7 +315,7 @@ function prepare_function_vote_number(post_id, cache) {
   var request_path = '/facebook/util/vote/get/'+post_id;
   var selector = '.user-idea[post_id='+post_id+'] .item-like > .item-like-count';
   if (cache == 'fresh') {
-    return function() {
+    (function() {
         jQuery.getJSON('/facebook/util/get_contest_start', function(res) {
           if (res['status'] !== 0) {
             jQuery.getJSON(request_path, function(json) {
@@ -297,7 +332,7 @@ function prepare_function_vote_number(post_id, cache) {
             $(selector).html('?');
           }
         }); // get contest start
-    };
+    })();
   }
   else {
     var data = text_data.search(post_id);
@@ -313,13 +348,23 @@ function prepare_function_vote_number(post_id, cache) {
   }
 }
 
-function prepare_function_is_like_text(post_id) {
+function prepare_function_is_like_text(post_id, cache) {
   var data = text_data.search(post_id);
+  if(1 && typeof(console) !== 'undefined' && console != null) {
+    ///console.log ('data', data, text_data);
+  }
   if(data != undefined) {
     var selector = '.user-idea[post_id='+post_id+'] .item-like > .item-like-button';
     var isLike =  data.isLike;
+        //console.log(0, data, data.post_id, data.isLike, isLike, "LIKEDDDD", fb_all_posts.length);
     if (isLike != false) {
       $(selector).addClass('liked').html('Liked');
+      if(1 && typeof(console) !== 'undefined' && console != null) {
+        //console.log(1, data, data.post_id, data.isLike, isLike, "LIKEDDDD", fb_all_posts.length);
+        if (FB.getSession().uid == '896050346') {
+          //alert(JSON.stringify(data) + " " + data.isLike);
+        }
+      }
     }
     else {
       $(selector).html('Not Like');
@@ -328,7 +373,7 @@ function prepare_function_is_like_text(post_id) {
   else {
     var fbuid = FB.getSession().uid;
     var request_path = '/facebook/util/delta/get/'+post_id+'/'+fbuid;
-    return function() {
+    (function() {
       jQuery.getJSON(request_path, function(json) {
           var isLike = json && json.delta;
           if (isLike != false) {
@@ -338,7 +383,7 @@ function prepare_function_is_like_text(post_id) {
             $(selector).html('Not Like');
           }
       });
-    };
+    })();
   }
 }
 window.today = function() {
@@ -373,6 +418,7 @@ window.fbAsyncInit = function() {
         console.log('logged in');
       }
       is_promoted = ideas_promoted();
+      text_data = is_like_text_data();
       get_result();
     }
     else {
@@ -448,7 +494,7 @@ $('.item-like-button').live('click', function(e) {
         self.removeClass('liked');
         self.html('Not Like');
       }
-      prepare_function_vote_number(post_id, 'fresh')();
+      prepare_function_vote_number(post_id, 'fresh');
     });
   }
 });
